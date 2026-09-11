@@ -99,6 +99,8 @@ switch ($endpoint) {
             $name     = trim($input['name'] ?? '');
             $start    = $input['startDate'] ?? '';
             $months   = intval($input['months'] ?? 0);
+            $interval = intval($input['intervalMonths'] ?? 1);
+            if (!in_array($interval, [1, 3, 6])) $interval = 1;
             $amount   = floatval($input['monthlyAmount'] ?? 0);
             $currency = in_array($input['currency'] ?? '', ['EGP','USD']) ? $input['currency'] : 'EGP';
             $myTurns  = is_array($input['myTurnMonths'] ?? null) ? array_values(array_unique(array_map('intval', $input['myTurnMonths']))) : [];
@@ -108,8 +110,8 @@ switch ($endpoint) {
             }
 
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare("INSERT INTO gam3eyas (section_id, name, start_date, months, monthly_amount, currency) VALUES (?,?,?,?,?,?)");
-            $stmt->execute([$sectionId, $name, $start, $months, $amount, $currency]);
+            $stmt = $pdo->prepare("INSERT INTO gam3eyas (section_id, name, start_date, months, interval_months, monthly_amount, currency) VALUES (?,?,?,?,?,?,?)");
+            $stmt->execute([$sectionId, $name, $start, $months, $interval, $amount, $currency]);
             $gid = $pdo->lastInsertId();
 
             $ins = $pdo->prepare("INSERT INTO gam3eya_schedule (gam3eya_id, month_idx, due_date, amount, paid) VALUES (?,?,?,?,0)");
@@ -118,7 +120,7 @@ switch ($endpoint) {
             $baseYear = (int)$startDT->format('Y');
             $baseMonth = (int)$startDT->format('m');
             for ($i = 0; $i < $months; $i++) {
-                $targetMonthTotal = $baseMonth + $i;
+                $targetMonthTotal = $baseMonth + ($i * $interval);
                 $y = $baseYear + intdiv($targetMonthTotal - 1, 12);
                 $m = (($targetMonthTotal - 1) % 12) + 1;
                 $lastDay = (int)date('t', mktime(0, 0, 0, $m, 1, $y));

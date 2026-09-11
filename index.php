@@ -57,10 +57,10 @@ requireLoginPage();
   }
   h1{ font-family:'Amiri', serif; font-weight:700; font-size:26px; margin:0; color:var(--gold-light); }
   .sub{ margin:2px 0 0; font-size:13px; color:var(--ink-dim); }
-  .body-layout{ display:flex; align-items:flex-start; min-height:60vh; }
+  .body-layout{ display:flex; align-items:stretch; min-height:calc(100vh - 140px); }
   nav.tabs-sidebar{
     flex:0 0 120px; width:120px; background:var(--cover); display:flex; flex-direction:column;
-    gap:8px; padding:14px 10px; box-sizing:border-box; max-height:calc(100vh - 120px);
+    gap:8px; padding:14px 10px; box-sizing:border-box;
     overflow-y:auto; scrollbar-width:none; border-left:3px double var(--gold);
   }
   nav.tabs-sidebar::-webkit-scrollbar{ display:none; }
@@ -354,7 +354,7 @@ function renderGam(sec){
         <div class="card-head">
           <div>
             <div class="card-title">${esc(g.name)}</div>
-            <div class="card-meta">تبدأ ${formatDate(new Date(g.start_date))} · ${g.months} شهر</div>
+            <div class="card-meta">تبدأ ${formatDate(new Date(g.start_date))} · ${g.months} دفعة${Number(g.interval_months)>1?' · كل '+g.interval_months+' شهور':''}</div>
           </div>
           <span class="badge">${CUR[g.currency]}</span>
         </div>
@@ -405,7 +405,7 @@ function renderGam(sec){
       html += `<div class="list-item" onclick="openGamDetail(${g.id})">
         <div class="list-item-main">
           <div class="card-title">${esc(g.name)}</div>
-          <div class="card-meta">${g.months} شهر · مدفوع ${paidCount}/${g.months}</div>
+          <div class="card-meta">${g.months} دفعة · مدفوع ${paidCount}/${g.months}</div>
         </div>
         <div class="list-item-side">
           <span class="badge">${CUR[g.currency]}</span>
@@ -617,10 +617,18 @@ function openGamForm(){
       <div class="field"><label>الاسم</label><input id="gName" placeholder="مثال: ${label} 1"></div>
       <div class="field-row">
         <div class="field"><label>تاريخ البداية</label><input id="gStart" type="date"></div>
-        <div class="field"><label>عدد الشهور</label><input id="gMonths" type="number" min="1" value="12"></div>
+        <div class="field"><label>عدد الدفعات</label><input id="gMonths" type="number" min="1" value="12"></div>
+      </div>
+      <div class="field">
+        <label>دورية الدفع</label>
+        <select id="gInterval">
+          <option value="1">شهري (كل شهر)</option>
+          <option value="3">كل 3 شهور</option>
+          <option value="6">كل 6 شهور</option>
+        </select>
       </div>
       <div class="field-row">
-        <div class="field"><label>مبلغ القسط الشهري</label><input id="gAmount" type="number" min="0" step="0.01"></div>
+        <div class="field"><label>مبلغ القسط</label><input id="gAmount" type="number" min="0" step="0.01"></div>
         <div class="field"><label>العملة</label>
           <select id="gCurrency"><option value="EGP">جنيه مصري (ج.م)</option><option value="USD">دولار ($)</option></select>
         </div>
@@ -639,6 +647,7 @@ async function saveGamForm(){
   const name = document.getElementById('gName').value.trim();
   const startDate = document.getElementById('gStart').value;
   const months = parseInt(document.getElementById('gMonths').value);
+  const intervalMonths = parseInt(document.getElementById('gInterval').value);
   const monthlyAmount = parseFloat(document.getElementById('gAmount').value);
   const currency = document.getElementById('gCurrency').value;
   const myTurnRaw = document.getElementById('gMyTurn').value;
@@ -657,7 +666,7 @@ async function saveGamForm(){
     return;
   }
   try{
-    await api('gam3eyas', { method:'POST', body:{ sectionId: activeSectionId, name, startDate, months, monthlyAmount, currency, myTurnMonths } });
+    await api('gam3eyas', { method:'POST', body:{ sectionId: activeSectionId, name, startDate, months, intervalMonths, monthlyAmount, currency, myTurnMonths } });
     closeModal();
     await loadState();
   }catch(e){ err.textContent = e.message; err.style.display='block'; }
