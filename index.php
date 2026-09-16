@@ -306,6 +306,15 @@ async function loadState(){
 
 function currentSection(){ return state.sections.find(s=>s.id===activeSectionId); }
 
+function nextSortOrder(type, sectionId, individualId){
+  const values = type === 'gam3eya'
+    ? state.gam3eyas.filter(x=>Number(x.section_id)===Number(sectionId)).map(x=>Number(x.sort_order)||0)
+    : type === 'individual'
+      ? state.individuals.filter(x=>Number(x.section_id)===Number(sectionId)).map(x=>Number(x.sort_order)||0)
+      : state.individuals.find(x=>Number(x.id)===Number(individualId))?.entries?.map(x=>Number(x.sort_order)||0) || [];
+  return (values.length ? Math.max(...values) : 0) + 1;
+}
+
 function selectTab(id){
   activeSectionId = id;
   selectedGamId = null;
@@ -394,7 +403,7 @@ function renderGam(sec){
     return;
   }
 
-  const items = state.gam3eyas.filter(g=>Number(g.section_id)===sec.id);
+  const items = state.gam3eyas.filter(g=>Number(g.section_id)===sec.id).sort((a,b)=> (Number(b.sort_order)||0) - (Number(a.sort_order)||0) || new Date(b.created_at||0) - new Date(a.created_at||0));
   let html = `<div class="toolbar"><h2>${esc(sec.name)}</h2><button class="primary" onclick="openGamForm()">+ إضافة ${esc(sec.name)}</button></div>`;
   if(items.length===0){
     html += `<div class="empty"><div class="icon">📒</div>ابدأ بإضافة أول ${esc(sec.name)} هنا<br>حدد تاريخ البداية وعدد الشهور والمبلغ</div>`;
@@ -460,7 +469,7 @@ function renderInd(sec){
     return;
   }
 
-  const items = state.individuals.filter(p=>Number(p.section_id)===sec.id);
+  const items = state.individuals.filter(p=>Number(p.section_id)===sec.id).sort((a,b)=> (Number(b.sort_order)||0) - (Number(a.sort_order)||0) || new Date(b.created_at||0) - new Date(a.created_at||0));
   let html = `<div class="toolbar"><h2>${esc(sec.name)}</h2><button class="primary" onclick="openIndForm()">+ إضافة ${esc(sec.name)}</button></div>`;
   if(items.length===0){
     html += `<div class="empty"><div class="icon">👤</div>لا يوجد أحد بعد في ${esc(sec.name)}<br>أضف عنصر وسجل حسابه</div>`;
@@ -633,7 +642,7 @@ function openGamForm(){
           <select id="gCurrency"><option value="EGP">جنيه مصري (ج.م)</option><option value="USD">دولار ($)</option></select>
         </div>
       </div>
-      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="gSort" type="number" value="0"></div>
+      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="gSort" type="number" value="${nextSortOrder('gam3eya', activeSectionId)}"></div>
       <div class="field" id="gMyTurnField" style="display:${sec.has_turns==1?'':'none'};"><label>أدوارك (أرقام الشهور مفصولة بفاصلة - اختياري)</label><input id="gMyTurn" placeholder="مثال: 3, 7, 10"></div>
       <div class="error-msg" id="gErr"></div>
       <div class="sheet-actions">
@@ -761,7 +770,7 @@ function openIndForm(){
           <select id="pCurrency"><option value="EGP">جنيه مصري (ج.م)</option><option value="USD">دولار ($)</option></select>
         </div>
       </div>
-      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="pSort" type="number" value="0"></div>
+      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="pSort" type="number" value="${nextSortOrder('individual', activeSectionId)}"></div>
       <div class="error-msg" id="pErr"></div>
       <div class="sheet-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
@@ -854,7 +863,7 @@ function openEntryForm(pid, entryId){
         </div>
       </div>
       <div class="field"><label>التاريخ</label><input id="eDate" type="date" value="${editing?e.entry_date:new Date().toISOString().slice(0,10)}"></div>
-      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="eSort" type="number" value="${editing?(Number(e.sort_order)||0):0}"></div>
+      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="eSort" type="number" value="${editing?(Number(e.sort_order)||0):nextSortOrder('entry', null, pid)}"></div>
       <div class="error-msg" id="eErr"></div>
       <div class="sheet-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
@@ -912,7 +921,7 @@ function openGamInvoice(gid){
 
 function openIndInvoice(pid){
   const p = state.individuals.find(x=>x.id===pid);
-  const sorted = [...p.entries].sort((a,b)=> new Date(a.entry_date) - new Date(b.entry_date) || a.id - b.id);
+  const sorted = [...p.entries].sort((a,b)=> (Number(b.sort_order)||0) - (Number(a.sort_order)||0) || new Date(b.entry_date) - new Date(a.entry_date) || b.id - a.id);
   let balance = 0, sumDebit = 0, sumCredit = 0;
   const rows = sorted.map(e=>{
     const debit = e.type==='debit' ? Number(e.amount) : 0;
