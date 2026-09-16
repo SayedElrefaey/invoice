@@ -82,7 +82,7 @@ switch ($endpoint) {
 
     case 'gam3eyas':
         if ($method === 'GET') {
-            $rows = $pdo->query("SELECT * FROM gam3eyas ORDER BY created_at DESC")->fetchAll();
+            $rows = $pdo->query("SELECT * FROM gam3eyas ORDER BY sort_order ASC, created_at DESC")->fetchAll();
             foreach ($rows as &$g) {
                 $s = $pdo->prepare("SELECT * FROM gam3eya_schedule WHERE gam3eya_id=? ORDER BY month_idx ASC");
                 $s->execute([$g['id']]);
@@ -110,8 +110,9 @@ switch ($endpoint) {
             }
 
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare("INSERT INTO gam3eyas (section_id, name, start_date, months, interval_months, monthly_amount, currency) VALUES (?,?,?,?,?,?,?)");
-            $stmt->execute([$sectionId, $name, $start, $months, $interval, $amount, $currency]);
+            $sortOrder = intval($input['sortOrder'] ?? 0);
+            $stmt = $pdo->prepare("INSERT INTO gam3eyas (section_id, name, start_date, months, interval_months, monthly_amount, currency, sort_order) VALUES (?,?,?,?,?,?,?,?)");
+            $stmt->execute([$sectionId, $name, $start, $months, $interval, $amount, $currency, $sortOrder]);
             $gid = $pdo->lastInsertId();
 
             $ins = $pdo->prepare("INSERT INTO gam3eya_schedule (gam3eya_id, month_idx, due_date, amount, paid) VALUES (?,?,?,?,0)");
@@ -146,7 +147,11 @@ switch ($endpoint) {
             $id   = intval($input['id'] ?? 0);
             $name = trim($input['name'] ?? '');
             if (!$id || !$name) respond(['error' => 'الاسم مطلوب'], 400);
-            $pdo->prepare("UPDATE gam3eyas SET name=? WHERE id=?")->execute([$name, $id]);
+            if (array_key_exists('sortOrder', $input)) {
+                $pdo->prepare("UPDATE gam3eyas SET name=?, sort_order=? WHERE id=?")->execute([$name, intval($input['sortOrder']), $id]);
+            } else {
+                $pdo->prepare("UPDATE gam3eyas SET name=? WHERE id=?")->execute([$name, $id]);
+            }
             respond(['ok' => true]);
         }
         break;
@@ -188,9 +193,9 @@ switch ($endpoint) {
 
     case 'individuals':
         if ($method === 'GET') {
-            $rows = $pdo->query("SELECT * FROM individuals ORDER BY created_at DESC")->fetchAll();
+            $rows = $pdo->query("SELECT * FROM individuals ORDER BY sort_order ASC, created_at DESC")->fetchAll();
             foreach ($rows as &$p) {
-                $s = $pdo->prepare("SELECT * FROM individual_entries WHERE individual_id=? ORDER BY entry_date ASC, id ASC");
+                $s = $pdo->prepare("SELECT * FROM individual_entries WHERE individual_id=? ORDER BY sort_order ASC, entry_date ASC, id ASC");
                 $s->execute([$p['id']]);
                 $p['entries'] = $s->fetchAll();
             }
@@ -202,8 +207,9 @@ switch ($endpoint) {
             $phone    = trim($input['phone'] ?? '');
             $currency = in_array($input['currency'] ?? '', ['EGP','USD']) ? $input['currency'] : 'EGP';
             if (!$sectionId || !$name) respond(['error' => 'بيانات غير مكتملة'], 400);
-            $stmt = $pdo->prepare("INSERT INTO individuals (section_id, name, phone, currency) VALUES (?,?,?,?)");
-            $stmt->execute([$sectionId, $name, $phone, $currency]);
+            $sortOrder = intval($input['sortOrder'] ?? 0);
+            $stmt = $pdo->prepare("INSERT INTO individuals (section_id, name, phone, currency, sort_order) VALUES (?,?,?,?,?)");
+            $stmt->execute([$sectionId, $name, $phone, $currency, $sortOrder]);
             respond(['id' => $pdo->lastInsertId()], 201);
         }
         if ($method === 'DELETE') {
@@ -217,7 +223,12 @@ switch ($endpoint) {
             $phone    = trim($input['phone'] ?? '');
             $currency = in_array($input['currency'] ?? '', ['EGP','USD']) ? $input['currency'] : 'EGP';
             if (!$id || !$name) respond(['error' => 'الاسم مطلوب'], 400);
-            $pdo->prepare("UPDATE individuals SET name=?, phone=?, currency=? WHERE id=?")->execute([$name, $phone, $currency, $id]);
+            $sortOrder = array_key_exists('sortOrder', $input) ? intval($input['sortOrder']) : null;
+            if ($sortOrder !== null) {
+                $pdo->prepare("UPDATE individuals SET name=?, phone=?, currency=?, sort_order=? WHERE id=?")->execute([$name, $phone, $currency, $sortOrder, $id]);
+            } else {
+                $pdo->prepare("UPDATE individuals SET name=?, phone=?, currency=? WHERE id=?")->execute([$name, $phone, $currency, $id]);
+            }
             respond(['ok' => true]);
         }
         break;
@@ -230,8 +241,9 @@ switch ($endpoint) {
             $type   = ($input['type'] ?? '') === 'credit' ? 'credit' : 'debit';
             $date   = $input['date'] ?? date('Y-m-d');
             if (!$individualId || $amount <= 0) respond(['error' => 'بيانات غير صحيحة'], 400);
-            $stmt = $pdo->prepare("INSERT INTO individual_entries (individual_id, note, amount, type, entry_date) VALUES (?,?,?,?,?)");
-            $stmt->execute([$individualId, $note, $amount, $type, $date]);
+            $sortOrder = intval($input['sortOrder'] ?? 0);
+            $stmt = $pdo->prepare("INSERT INTO individual_entries (individual_id, note, amount, type, entry_date, sort_order) VALUES (?,?,?,?,?,?)");
+            $stmt->execute([$individualId, $note, $amount, $type, $date, $sortOrder]);
             respond(['id' => $pdo->lastInsertId()], 201);
         }
         if ($method === 'PUT') {
@@ -241,8 +253,13 @@ switch ($endpoint) {
             $type   = ($input['type'] ?? '') === 'credit' ? 'credit' : 'debit';
             $date   = $input['date'] ?? date('Y-m-d');
             if (!$id || $amount <= 0) respond(['error' => 'بيانات غير صحيحة'], 400);
-            $stmt = $pdo->prepare("UPDATE individual_entries SET note=?, amount=?, type=?, entry_date=? WHERE id=?");
-            $stmt->execute([$note, $amount, $type, $date, $id]);
+            if (array_key_exists('sortOrder', $input)) {
+                $stmt = $pdo->prepare("UPDATE individual_entries SET note=?, amount=?, type=?, entry_date=?, sort_order=? WHERE id=?");
+                $stmt->execute([$note, $amount, $type, $date, intval($input['sortOrder']), $id]);
+            } else {
+                $stmt = $pdo->prepare("UPDATE individual_entries SET note=?, amount=?, type=?, entry_date=? WHERE id=?");
+                $stmt->execute([$note, $amount, $type, $date, $id]);
+            }
             respond(['ok' => true]);
         }
         if ($method === 'DELETE') {

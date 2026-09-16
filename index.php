@@ -633,6 +633,7 @@ function openGamForm(){
           <select id="gCurrency"><option value="EGP">جنيه مصري (ج.م)</option><option value="USD">دولار ($)</option></select>
         </div>
       </div>
+      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="gSort" type="number" value="0"></div>
       <div class="field" id="gMyTurnField" style="display:${sec.has_turns==1?'':'none'};"><label>أدوارك (أرقام الشهور مفصولة بفاصلة - اختياري)</label><input id="gMyTurn" placeholder="مثال: 3, 7, 10"></div>
       <div class="error-msg" id="gErr"></div>
       <div class="sheet-actions">
@@ -648,6 +649,7 @@ async function saveGamForm(){
   const startDate = document.getElementById('gStart').value;
   const months = parseInt(document.getElementById('gMonths').value);
   const intervalMonths = parseInt(document.getElementById('gInterval').value);
+  const sortOrder = parseInt(document.getElementById('gSort').value) || 0;
   const monthlyAmount = parseFloat(document.getElementById('gAmount').value);
   const currency = document.getElementById('gCurrency').value;
   const myTurnRaw = document.getElementById('gMyTurn').value;
@@ -666,7 +668,7 @@ async function saveGamForm(){
     return;
   }
   try{
-    await api('gam3eyas', { method:'POST', body:{ sectionId: activeSectionId, name, startDate, months, intervalMonths, monthlyAmount, currency, myTurnMonths } });
+    await api('gam3eyas', { method:'POST', body:{ sectionId: activeSectionId, name, startDate, months, intervalMonths, monthlyAmount, currency, myTurnMonths, sortOrder } });
     closeModal();
     await loadState();
   }catch(e){ err.textContent = e.message; err.style.display='block'; }
@@ -724,6 +726,7 @@ function openGamRename(id){
     <div class="sheet">
       <h3>تعديل اسم الجمعية</h3>
       <div class="field"><label>اسم الجمعية</label><input id="gRenameInput" value="${esc(g.name)}"></div>
+      <div class="field"><label>الترتيب في القائمة</label><input id="gRenameSort" type="number" value="${Number(g.sort_order)||0}"></div>
       <div class="error-msg" id="gRenameErr"></div>
       <div class="sheet-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
@@ -738,7 +741,8 @@ async function saveGamRename(id){
   const err = document.getElementById('gRenameErr');
   if(!name){ err.textContent='الاسم مطلوب'; err.style.display='block'; return; }
   try{
-    await api('gam3eyas', { method:'PUT', body:{ id, name } });
+    const sortOrder = parseInt(document.getElementById('gRenameSort').value) || 0;
+    await api('gam3eyas', { method:'PUT', body:{ id, name, sortOrder } });
     closeModal();
     await loadState();
   }catch(e){ err.textContent = e.message; err.style.display='block'; }
@@ -757,6 +761,7 @@ function openIndForm(){
           <select id="pCurrency"><option value="EGP">جنيه مصري (ج.م)</option><option value="USD">دولار ($)</option></select>
         </div>
       </div>
+      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="pSort" type="number" value="0"></div>
       <div class="error-msg" id="pErr"></div>
       <div class="sheet-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
@@ -777,7 +782,8 @@ async function saveIndForm(){
     return;
   }
   try{
-    await api('individuals', { method:'POST', body:{ sectionId: activeSectionId, name, phone, currency } });
+    const sortOrder = parseInt(document.getElementById('pSort').value) || 0;
+    await api('individuals', { method:'POST', body:{ sectionId: activeSectionId, name, phone, currency, sortOrder } });
     closeModal();
     await loadState();
   }catch(e){ err.textContent = e.message; err.style.display='block'; }
@@ -805,6 +811,7 @@ function openIndEdit(id){
           </select>
         </div>
       </div>
+      <div class="field"><label>الترتيب في القائمة</label><input id="pEditSort" type="number" value="${Number(p.sort_order)||0}"></div>
       <div class="error-msg" id="pEditErr"></div>
       <div class="sheet-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
@@ -821,7 +828,8 @@ async function saveIndEdit(id){
   const err = document.getElementById('pEditErr');
   if(!name){ err.textContent='الاسم مطلوب'; err.style.display='block'; return; }
   try{
-    await api('individuals', { method:'PUT', body:{ id, name, phone, currency } });
+    const sortOrder = parseInt(document.getElementById('pEditSort').value) || 0;
+    await api('individuals', { method:'PUT', body:{ id, name, phone, currency, sortOrder } });
     closeModal();
     await loadState();
   }catch(e){ err.textContent = e.message; err.style.display='block'; }
@@ -846,6 +854,7 @@ function openEntryForm(pid, entryId){
         </div>
       </div>
       <div class="field"><label>التاريخ</label><input id="eDate" type="date" value="${editing?e.entry_date:new Date().toISOString().slice(0,10)}"></div>
+      <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="eSort" type="number" value="${editing?(Number(e.sort_order)||0):0}"></div>
       <div class="error-msg" id="eErr"></div>
       <div class="sheet-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
@@ -860,6 +869,7 @@ async function saveEntry(pid, entryId){
   const amount = parseFloat(document.getElementById('eAmount').value);
   const type = document.getElementById('eType').value;
   const date = document.getElementById('eDate').value;
+  const sortOrder = parseInt(document.getElementById('eSort').value) || 0;
   const err = document.getElementById('eErr');
   if(!amount || amount<=0 || !date){
     err.textContent = 'من فضلك أدخل مبلغ صحيح وتاريخ';
@@ -868,9 +878,9 @@ async function saveEntry(pid, entryId){
   }
   try{
     if(entryId !== undefined){
-      await api('entries', { method:'PUT', body:{ id: entryId, note, amount, type, date } });
+      await api('entries', { method:'PUT', body:{ id: entryId, note, amount, type, date, sortOrder } });
     } else {
-      await api('entries', { method:'POST', body:{ individualId: pid, note, amount, type, date } });
+      await api('entries', { method:'POST', body:{ individualId: pid, note, amount, type, date, sortOrder } });
     }
     closeModal();
     await loadState();
