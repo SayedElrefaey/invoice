@@ -1,0 +1,95 @@
+name: One-time automatic descending ordering
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, 'Auto apply descending ordering') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch ordering logic
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          p = Path('index.php')
+          s = p.read_text(encoding='utf-8')
+
+          old = "function currentSection(){ return state.sections.find(s=>s.id===activeSectionId); }"
+          new = """function currentSection(){ return state.sections.find(s=>s.id===activeSectionId); }
+
+          function nextSortOrder(type, sectionId, individualId){
+            const values = type === 'gam3eya'
+              ? state.gam3eyas.filter(x=>Number(x.section_id)===Number(sectionId)).map(x=>Number(x.sort_order)||0)
+              : type === 'individual'
+                ? state.individuals.filter(x=>Number(x.section_id)===Number(sectionId)).map(x=>Number(x.sort_order)||0)
+                : state.individuals.find(x=>Number(x.id)===Number(individualId))?.entries?.map(x=>Number(x.sort_order)||0) || [];
+            return (values.length ? Math.max(...values) : 0) + 1;
+          }"""
+          if old not in s:
+            raise SystemExit('currentSection anchor not found')
+          s = s.replace(old, new, 1)
+
+          s = s.replace("<div class=\"field\"><label>الترتيب في القائمة (رقم - اختياري)</label><input id=\"gSort\" type=\"number\" value=\"0\"></div>",
+                        "<div class=\"field\"><label>الترتيب في القائمة (رقم - اختياري)</label><input id=\"gSort\" type=\"number\" value=\"${nextSortOrder('gam3eya', activeSectionId)}\"></div>", 1)
+          s = s.replace("<div class=\"field\"><label>الترتيب في القائمة (رقم - اختياري)</label><input id=\"pSort\" type=\"number\" value=\"0\"></div>",
+                        "<div class=\"field\"><label>الترتيب في القائمة (رقم - اختياري)</label><input id=\"pSort\" type=\"number\" value=\"${nextSortOrder('individual', activeSectionId)}\"></div>", 1)
+          s = s.replace("<div class=\"field\"><label>الترتيب في القائمة (رقم - اختياري)</label><input id=\"eSort\" type=\"number\" value=\"${editing?(Number(e.sort_order)||0):0}\"></div>",
+                        "<div class=\"field\"><label>الترتيب في القائمة (رقم - اختياري)</label><input id=\"eSort\" type=\"number\" value=\"${editing?(Number(e.sort_order)||0):nextSortOrder('entry', null, pid)}\"></div>", 1)
+
+          old = "const items = state.gam3eyas.filter(g=>Number(g.section_id)===sec.id);"
+          new = "const items = state.gam3eyas.filter(g=>Number(g.section_id)===sec.id).sort((a,b)=> (Number(b.sort_order)||0) - (Number(a.sort_order)||0) || new Date(b.created_at||0) - new Date(a.created_at||0));"
+          if old not in s: raise SystemExit('gam items anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "const items = state.individuals.filter(p=>Number(p.section_id)===sec.id);"
+          new = "const items = state.individuals.filter(p=>Number(p.section_id)===sec.id).sort((a,b)=> (Number(b.sort_order)||0) - (Number(a.sort_order)||0) || new Date(b.created_at||0) - new Date(a.created_at||0));"
+          if old not in s: raise SystemExit('ind items anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "const sorted = [...p.entries].sort((a,b)=> new Date(a.entry_date) - new Date(b.entry_date) || a.id - b.id);"
+          new = "const sorted = [...p.entries].sort((a,b)=> (Number(b.sort_order)||0) - (Number(a.sort_order)||0) || new Date(b.entry_date) - new Date(a.entry_date) || b.id - a.id);"
+          if old not in s: raise SystemExit('invoice entry sort anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+
+          # Make the API assign the next number whenever the UI sends 0.
+          p = Path('api.php')
+          s = p.read_text(encoding='utf-8')
+
+          old = "$sortOrder = intval($input['sortOrder'] ?? 0);\n            $stmt = $pdo->prepare(\"INSERT INTO gam3eyas"
+          new = "$sortOrder = array_key_exists('sortOrder', $input) && intval($input['sortOrder']) > 0 ? intval($input['sortOrder']) : (int)$pdo->query(\"SELECT COALESCE(MAX(sort_order),0)+1 FROM gam3eyas WHERE section_id=\".(int)$sectionId)->fetchColumn();\n            $stmt = $pdo->prepare(\"INSERT INTO gam3eyas"
+          if old not in s: raise SystemExit('gam API insert anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "$sortOrder = intval($input['sortOrder'] ?? 0);\n            $stmt = $pdo->prepare(\"INSERT INTO individuals"
+          new = "$sortOrder = array_key_exists('sortOrder', $input) && intval($input['sortOrder']) > 0 ? intval($input['sortOrder']) : (int)$pdo->query(\"SELECT COALESCE(MAX(sort_order),0)+1 FROM individuals WHERE section_id=\".(int)$sectionId)->fetchColumn();\n            $stmt = $pdo->prepare(\"INSERT INTO individuals"
+          if old not in s: raise SystemExit('individual API insert anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "$sortOrder = intval($input['sortOrder'] ?? 0);\n            $stmt = $pdo->prepare(\"INSERT INTO individual_entries"
+          new = "$sortOrder = array_key_exists('sortOrder', $input) && intval($input['sortOrder']) > 0 ? intval($input['sortOrder']) : (int)$pdo->query(\"SELECT COALESCE(MAX(sort_order),0)+1 FROM individual_entries WHERE individual_id=\".(int)$individualId)->fetchColumn();\n            $stmt = $pdo->prepare(\"INSERT INTO individual_entries"
+          if old not in s: raise SystemExit('entry API insert anchor not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+
+      - name: Commit and remove one-time workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.php api.php
+          git rm .github/workflows/auto-ordering.yml
+          git commit -m "Auto apply descending ordering"
+          git push
