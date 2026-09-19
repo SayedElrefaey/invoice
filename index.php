@@ -177,6 +177,18 @@ requireLoginPage();
   .field-row .field{ flex:1; }
   .sheet-actions{ display:flex; gap:10px; margin-top:16px; }
   .sheet-actions button{ flex:1; padding:11px; }
+  .entry-actions{ align-items:stretch; }
+  .entry-actions button{ min-height:44px; }
+  .entry-save-more{ flex:2 !important; background:var(--gold-light); color:var(--cover-2); border:1px solid var(--gold); border-radius:8px; padding:11px 10px; font-family:'Tajawal',sans-serif; font-weight:900; font-size:13px; cursor:pointer; }
+  .entry-save-more:hover{ background:var(--gold); }
+  .entry-type-choice{ display:flex; gap:10px; width:100%; }
+  .entry-type-option{ flex:1; position:relative; display:flex; align-items:center; justify-content:center; gap:8px; min-height:48px; padding:8px 12px; border:2px solid var(--line); border-radius:10px; background:#fff; color:var(--cover); font-weight:900; cursor:pointer; }
+  .entry-type-option input{ position:absolute; opacity:0; pointer-events:none; }
+  .entry-type-option.debit:has(input:checked){ border-color:#A3402F; background:#FDE2E2; color:#A3402F; }
+  .entry-type-option.credit:has(input:checked){ border-color:#2F6B4F; background:#DCF0E3; color:#2F6B4F; }
+  .entry-radio{ width:20px; height:20px; border:3px solid currentColor; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; }
+  .entry-type-option input:checked + .entry-radio::after{ content:""; width:10px; height:10px; background:currentColor; border-radius:50%; }
+
   .error-msg{ color:var(--danger); font-size:12px; margin-top:4px; display:none; }
   .invoice-wrap{ text-align:center; }
   .invoice{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:22px; text-align:right; margin-bottom:16px; }
@@ -853,47 +865,61 @@ function openEntryForm(pid, entryId){
     <div class="sheet">
       <h3>${editing?'تعديل الحركة':'إضافة حركة على الحساب'}</h3>
       <div class="field"><label>الوصف</label><input id="eNote" placeholder="مثال: دفعة شهر أغسطس" value="${editing?esc(e.note||''):''}"></div>
-      <div class="field-row">
-        <div class="field"><label>المبلغ</label><input id="eAmount" type="number" min="0" step="0.01" value="${editing?e.amount:''}"></div>
-        <div class="field"><label>نوع الحركة</label>
-          <select id="eType">
-            <option value="debit" ${editing && e.type==='debit'?'selected':''}>مستحق (إضافة)</option>
-            <option value="credit" ${editing && e.type==='credit'?'selected':''}>تم تحصيله (خصم)</option>
-          </select>
+      <div class="field"><label>المبلغ</label><input id="eAmount" type="number" min="0" step="0.01" value="${editing?e.amount:''}"></div>
+      <div class="field">
+        <label>نوع الحركة</label>
+        <div class="entry-type-choice">
+          <label class="entry-type-option debit">
+            <input type="radio" name="eType" value="debit" ${!editing || e.type==='debit'?'checked':''}>
+            <span class="entry-radio"></span><span>عليه</span>
+          </label>
+          <label class="entry-type-option credit">
+            <input type="radio" name="eType" value="credit" ${editing && e.type==='credit'?'checked':''}>
+            <span class="entry-radio"></span><span>له</span>
+          </label>
         </div>
       </div>
       <div class="field"><label>التاريخ</label><input id="eDate" type="date" value="${editing?e.entry_date:new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>الترتيب في القائمة (رقم - اختياري)</label><input id="eSort" type="number" value="${editing?(Number(e.sort_order)||0):nextSortOrder('entry', null, pid)}"></div>
       <div class="error-msg" id="eErr"></div>
-      <div class="sheet-actions">
+      <div class="sheet-actions entry-actions">
         <button class="ghost" onclick="closeModal()">إلغاء</button>
-        <button class="primary" onclick="saveEntry(${pid}${editing?','+entryId:''})">${editing?'حفظ التعديل':'حفظ الحركة'}</button>
+        ${!editing ? `
+          <button class="entry-save-more" onclick="saveEntry(${pid}, undefined, true)">حفظ و إضافة عملية جديدة</button>
+          <button class="primary" onclick="saveEntry(${pid})">حفظ و خروج</button>
+        ` : `
+          <button class="primary" onclick="saveEntry(${pid}, ${entryId})">حفظ التعديل</button>
+        `}
       </div>
     </div>
   </div>`;
 }
 
-async function saveEntry(pid, entryId){
-  const note = document.getElementById('eNote').value.trim();
-  const amount = parseFloat(document.getElementById('eAmount').value);
-  const type = document.getElementById('eType').value;
-  const date = document.getElementById('eDate').value;
-  const sortOrder = parseInt(document.getElementById('eSort').value) || 0;
-  const err = document.getElementById('eErr');
-  if(!amount || amount<=0 || !date){
-    err.textContent = 'من فضلك أدخل مبلغ صحيح وتاريخ';
-    err.style.display='block';
-    return;
-  }
+async function saveEntry(pid, entryId, keepOpen=false){
+  const note=document.getElementById('eNote').value.trim();
+  const amount=parseFloat(document.getElementById('eAmount').value);
+  const typeEl=document.querySelector('input[name="eType"]:checked');
+  const type=typeEl?typeEl.value:'debit';
+  const date=document.getElementById('eDate').value;
+  const sortOrder=parseInt(document.getElementById('eSort').value)||0;
+  const err=document.getElementById('eErr');
+  if(!amount||amount<=0||!date){err.textContent='من فضلك أدخل مبلغ صحيح وتاريخ';err.style.display='block';return;}
   try{
-    if(entryId !== undefined){
-      await api('entries', { method:'PUT', body:{ id: entryId, note, amount, type, date, sortOrder } });
-    } else {
-      await api('entries', { method:'POST', body:{ individualId: pid, note, amount, type, date, sortOrder } });
+    if(entryId!==undefined){
+      await api('entries',{method:'PUT',body:{id:entryId,note,amount,type,date,sortOrder}});
+    }else{
+      await api('entries',{method:'POST',body:{individualId:pid,note,amount,type,date,sortOrder}});
+    }
+    if(keepOpen){
+      await loadState();
+      openEntryForm(pid);
+      document.getElementById('eDate').value=date;
+      document.getElementById('eNote').focus();
+      return;
     }
     closeModal();
     await loadState();
-  }catch(e){ err.textContent = e.message; err.style.display='block'; }
+  }catch(e){err.textContent=e.message;err.style.display='block';}
 }
 
 async function deleteEntry(entryId){
